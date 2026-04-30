@@ -18,8 +18,8 @@ jobs:
 
       - name: Compile
         run: mvn clean --batch-mode compile
-        env:
-          JWT_HMAC_SECRET: ${{ secrets.JWT_HMAC_SECRET }}
 
       - name: Test
         run: mvn --batch-mode test
+        env:
+          JWT_HMAC_SECRET: ${{ secrets.JWT_HMAC_SECRET }}
