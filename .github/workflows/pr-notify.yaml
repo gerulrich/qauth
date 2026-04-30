@@ -1,0 +1,39 @@
+---
+name: Pull Request Notification
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  notify-pull-request:
+    name: Notify Pull Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Send PR data to webhook
+        run: |
+          curl -X POST ${{ secrets.WEBHOOK_URL }}/tailscale/gha/pr \
+            -H "Content-Type: application/json" \
+            -d '{
+              "action": "${{ github.event.action }}",
+              "title": "${{ github.event.pull_request.title }}",
+              "number": ${{ github.event.pull_request.number }},
+              "author": "${{ github.event.pull_request.user.login }}",
+              "url": "${{ github.event.pull_request.html_url }}",
+              "branch": "${{ github.event.pull_request.head.ref }}",
+              "base": "${{ github.event.pull_request.base.ref }}",
+              "state": "${{ github.event.pull_request.state }}",
+              "repository": "${{ github.repository }}"
+            }'
