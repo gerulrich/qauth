@@ -41,7 +41,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate JWT HMAC secret
-        run: echo "JWT_HMAC_SECRET=$(python3 -c \"import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(64)).decode().rstrip('='))\")" >> "$GITHUB_ENV"
+        run: |
+          SECRET=$(dd if=/dev/urandom bs=1 count=64 2>/dev/null | base64 -w0 | tr '+/' '-_' | tr -d '=')
+          echo "JWT_HMAC_SECRET=$SECRET" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
