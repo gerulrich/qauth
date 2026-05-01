@@ -17,7 +17,8 @@ jobs:
           distribution: 'graalvm'
 
       - name: Generate JWT HMAC secret
-        run: echo "JWT_HMAC_SECRET=$(python3 -c \"import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(64)).decode().rstrip('='))\")" >> "$GITHUB_ENV"
+        run: |
+          echo "JWT_HMAC_SECRET=$(dd if=/dev/urandom bs=1 count=64 2>/dev/null | base64 | tr '+/' '-_' | tr -d '=')" >> "$GITHUB_ENV"
 
       - name: Compile
         run: mvn clean --batch-mode compile
