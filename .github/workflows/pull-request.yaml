@@ -16,10 +16,13 @@ jobs:
           java-version: '21'
           distribution: 'graalvm'
 
+      - name: Generate JWT HMAC secret
+        run: |
+          SECRET=$(dd if=/dev/urandom bs=1 count=64 2>/dev/null | base64 -w0 | tr '+/' '-_' | tr -d '=')
+          echo "JWT_HMAC_SECRET=$SECRET" >> "$GITHUB_ENV"
+
       - name: Compile
         run: mvn clean --batch-mode compile
 
       - name: Test
         run: mvn --batch-mode test
-        env:
-          JWT_HMAC_SECRET: ${{ secrets.JWT_HMAC_SECRET }}
