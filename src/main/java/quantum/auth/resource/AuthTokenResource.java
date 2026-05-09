@@ -17,13 +17,13 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import quantum.auth.api.ApiUser;
+import quantum.auth.api.RefreshRequest;
 import quantum.auth.api.TokenResponse;
 import quantum.auth.api.TokenRequest;
 import quantum.auth.service.AuthTokenService;
 import quantum.auth.service.UserService;
 
 @Path("/auth")
-@Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 @Tag(name = "Authentication", description = "Operations for obtaining authentication tokens")
 public class AuthTokenResource {
@@ -37,6 +37,7 @@ public class AuthTokenResource {
     @POST
     @Path("/token")
     @PermitAll
+    @Consumes(MediaType.APPLICATION_JSON)
     @Operation(
         summary = "Generate JWT token",
         description = "Authenticates a user with email and password and returns a signed JWT Bearer token."
@@ -53,6 +54,28 @@ public class AuthTokenResource {
     })
     public Uni<TokenResponse> generateToken(@Valid TokenRequest request) {
         return authTokenService.generateToken(request.email(), request.password());
+    }
+
+
+    @POST
+    @Path("/refresh")
+    @PermitAll
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Refresh JWT token",
+        description = "Issues a new access token and refresh token using an opaque refresh token. The old refresh token is revoked (rotation)."
+    )
+    @RequestBody(content = @Content(schema = @Schema(implementation = RefreshRequest.class)))
+    @APIResponses({
+        @APIResponse(
+            responseCode = "200",
+            description = "Tokens refreshed successfully",
+            content = @Content(schema = @Schema(implementation = TokenResponse.class))
+        ),
+        @APIResponse(responseCode = "401", description = "Invalid or expired refresh token")
+    })
+    public Uni<TokenResponse> refreshToken(@Valid RefreshRequest request) {
+        return authTokenService.refreshToken(request.refreshToken());
     }
 
     @GET
