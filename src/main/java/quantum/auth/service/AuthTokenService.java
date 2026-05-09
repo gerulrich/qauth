@@ -85,7 +85,7 @@ public class AuthTokenService {
                 .claim("uid", uid)
                 .claim("email", user.email)
                 .claim("roles", roles)
-                .claim("level", level)
+                .claim("level", Integer.valueOf(level))
                 .expiresIn(defaultExpiresSeconds)
                 .sign();
         return new TokenResponse("Bearer", token, defaultExpiresSeconds);
@@ -102,7 +102,7 @@ public class AuthTokenService {
     private String maskEmail(String email) {
         int atIndex = email.indexOf("@");
         if (atIndex > 1) {
-            return STR."\{email.charAt(0)}***\{email.substring(atIndex)}";
+            return String.format("%c***%s", email.charAt(0), email.substring(atIndex));
         }
         return "***";
     }
