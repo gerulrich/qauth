@@ -21,6 +21,7 @@ jobs:
     permissions:
       security-events: write
       contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -30,7 +31,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 21
+          java-version: '21'
           cache: maven
 
       - name: Initialize CodeQL
@@ -38,8 +39,10 @@ jobs:
         with:
           languages: java
 
-      - name: Build with Maven
-        run: mvn -B clean package -DskipTests
+      - name: Build with Maven (force Java 21 release)
+        run: mvn -B clean package -DskipTests -Dmaven.compiler.release=21
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
+        with:
+          add-snippet: true
