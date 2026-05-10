@@ -37,6 +37,9 @@ public class AuthTokenService {
     @Inject
     PasswordService passwordService;
 
+    @Inject
+    GoogleTokenVerifierService googleTokenVerifierService;
+
     @ConfigProperty(name = "mp.jwt.verify.issuer", defaultValue = "quantumlab")
     String issuer;
 
@@ -100,6 +103,27 @@ public class AuthTokenService {
                     return Uni.createFrom().failure(new UnauthorizedException("Invalid refresh token"));
                 }
                 return buildTokenResponseWithRefresh(user);
+            });
+    }
+
+    public Uni<TokenResponse> generateTokenFromGoogle(String googleToken) {
+        return googleTokenVerifierService.verifyAndExtractEmail(googleToken)
+            .onItem().transformToUni(email -> {
+                String masked = maskEmail(email);
+                LOG.infof("Google sign-in request received for email: %s", masked);
+                return userRepository.findByEmail(email)
+                    .onItem().ifNull().failWith(() -> {
+                        LOG.warnf("Google sign-in rejected — user not found: %s", masked);
+                        return new UnauthorizedException("User is blocked");
+                    })
+                    .onItem().transformToUni(user -> {
+                        if (!isUserEnabled(user)) {
+                            LOG.warnf("Google sign-in rejected — account disabled: %s", masked);
+                            return Uni.createFrom().failure(new UnauthorizedException("User is blocked"));
+                        }
+                        return item(user);
+                    })
+                    .onItem().transformToUni(this::buildTokenResponseWithRefresh);
             });
     }
 
