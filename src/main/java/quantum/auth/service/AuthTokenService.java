@@ -40,6 +40,9 @@ public class AuthTokenService {
     @Inject
     GoogleTokenVerifierService googleTokenVerifierService;
 
+    @Inject
+    OidcTokenVerifierService oidcTokenVerifierService;
+
     @ConfigProperty(name = "mp.jwt.verify.issuer", defaultValue = "quantumlab")
     String issuer;
 
@@ -119,6 +122,27 @@ public class AuthTokenService {
                     .onItem().transformToUni(user -> {
                         if (!isUserEnabled(user)) {
                             LOG.warnf("Google sign-in rejected — account disabled: %s", masked);
+                            return Uni.createFrom().failure(new UnauthorizedException("User is blocked"));
+                        }
+                        return item(user);
+                    })
+                    .onItem().transformToUni(this::buildTokenResponseWithRefresh);
+            });
+    }
+
+    public Uni<TokenResponse> generateTokenFromOidc(String oidcToken) {
+        return oidcTokenVerifierService.verifyAndExtractEmail(oidcToken)
+            .onItem().transformToUni(email -> {
+                String masked = maskEmail(email);
+                LOG.infof("OIDC sign-in request received for email: %s", masked);
+                return userRepository.findByEmail(email)
+                    .onItem().ifNull().failWith(() -> {
+                        LOG.warnf("OIDC sign-in rejected — user not found: %s", masked);
+                        return new UnauthorizedException("User is blocked");
+                    })
+                    .onItem().transformToUni(user -> {
+                        if (!isUserEnabled(user)) {
+                            LOG.warnf("OIDC sign-in rejected — account disabled: %s", masked);
                             return Uni.createFrom().failure(new UnauthorizedException("User is blocked"));
                         }
                         return item(user);

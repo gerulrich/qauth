@@ -18,6 +18,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import quantum.auth.api.ApiUser;
 import quantum.auth.api.GoogleTokenRequest;
+import quantum.auth.api.OidcTokenRequest;
 import quantum.auth.api.RefreshRequest;
 import quantum.auth.api.TokenResponse;
 import quantum.auth.api.TokenRequest;
@@ -77,6 +78,28 @@ public class AuthTokenResource {
     })
     public Uni<TokenResponse> generateTokenWithGoogle(@Valid GoogleTokenRequest request) {
         return authTokenService.generateTokenFromGoogle(request.token());
+    }
+
+    @POST
+    @Path("/token/oidc")
+    @PermitAll
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Generate JWT token using OIDC",
+        description = "Verifies an OIDC ID token (for example PocketID), checks user status, and returns application JWT tokens."
+    )
+    @RequestBody(content = @Content(schema = @Schema(implementation = OidcTokenRequest.class)))
+    @APIResponses({
+        @APIResponse(
+            responseCode = "200",
+            description = "Token generated successfully",
+            content = @Content(schema = @Schema(implementation = TokenResponse.class))
+        ),
+        @APIResponse(responseCode = "401", description = "Invalid OIDC token or blocked user"),
+        @APIResponse(responseCode = "400", description = "Invalid request body")
+    })
+    public Uni<TokenResponse> generateTokenWithOidc(@Valid OidcTokenRequest request) {
+        return authTokenService.generateTokenFromOidc(request.token());
     }
 
 

@@ -38,6 +38,9 @@ class AuthTokenServiceTest {
     @InjectMock
     GoogleTokenVerifierService googleTokenVerifierService;
 
+     @InjectMock
+    OidcTokenVerifierService oidcTokenVerifierService;
+
     // ---------------------------------------------------
     // generateToken
     // ---------------------------------------------------
@@ -215,6 +218,80 @@ class AuthTokenServiceTest {
                .thenReturn(Uni.createFrom().failure(new UnauthorizedException("Authorization header is invalid or has been expired")));
 
         authTokenService.generateTokenFromGoogle("invalid-google-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
+    }
+
+    @Test
+    void shouldReturnTokenWhenOidcTokenIsValid() {
+        User user = new User();
+        user.email = "oidc-active@example.com";
+        user.enabled = true;
+        user.plan = "pro";
+        user.roles = List.of("user");
+
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
+               .thenReturn(Uni.createFrom().item("oidc-active@example.com"));
+        Mockito.when(userRepository.findByEmail("oidc-active@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+        Mockito.when(refreshTokenRepository.persist(Mockito.<RefreshToken>any()))
+               .thenAnswer(inv -> { RefreshToken rt = inv.getArgument(0); return Uni.createFrom().item(rt); });
+
+        var response = authTokenService.generateTokenFromOidc("valid-oidc-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitItem()
+            .assertCompleted()
+            .getItem();
+
+        assertNotNull(response);
+        assertEquals("Bearer", response.tokenType());
+        assertNotNull(response.accessToken());
+        assertFalse(response.accessToken().isBlank());
+        assertNotNull(response.refreshToken());
+        assertFalse(response.refreshToken().isBlank());
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenOidcUserNotFound() {
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
+               .thenReturn(Uni.createFrom().item("missing-oidc@example.com"));
+        Mockito.when(userRepository.findByEmail("missing-oidc@example.com"))
+               .thenReturn(Uni.createFrom().nullItem());
+
+        authTokenService.generateTokenFromOidc("valid-oidc-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenOidcUserIsDisabled() {
+        User user = new User();
+        user.email = "disabled-oidc@example.com";
+        user.enabled = false;
+
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
+               .thenReturn(Uni.createFrom().item("disabled-oidc@example.com"));
+        Mockito.when(userRepository.findByEmail("disabled-oidc@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+
+        authTokenService.generateTokenFromOidc("valid-oidc-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenOidcTokenIsInvalid() {
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("invalid-oidc-token"))
+               .thenReturn(Uni.createFrom().failure(new UnauthorizedException("Authorization header is invalid or has been expired")));
+
+        authTokenService.generateTokenFromOidc("invalid-oidc-token")
             .subscribe()
             .withSubscriber(UniAssertSubscriber.create())
             .awaitFailure()

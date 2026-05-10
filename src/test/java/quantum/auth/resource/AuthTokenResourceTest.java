@@ -12,6 +12,7 @@ import quantum.auth.model.User;
 import quantum.auth.repository.RefreshTokenRepository;
 import quantum.auth.repository.UserRepository;
 import quantum.auth.service.GoogleTokenVerifierService;
+import quantum.auth.service.OidcTokenVerifierService;
 import quantum.auth.service.PasswordService;
 
 import java.nio.charset.StandardCharsets;
@@ -38,6 +39,9 @@ class AuthTokenResourceTest {
 
     @InjectMock
     GoogleTokenVerifierService googleTokenVerifierService;
+
+    @InjectMock
+    OidcTokenVerifierService oidcTokenVerifierService;
 
     @Test
     void shouldReturnBadRequestWhenBodyIsEmpty() {
@@ -216,6 +220,75 @@ class AuthTokenResourceTest {
             .contentType(ContentType.JSON)
             .body("{\"token\":\"valid-google-token\"}")
             .when().post("/auth/token/google")
+            .then()
+            .statusCode(401);
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenOidcTokenBodyIsEmpty() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("{}")
+            .when().post("/auth/token/oidc")
+            .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenOidcTokenIsInvalid() {
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("invalid-oidc-token"))
+               .thenReturn(Uni.createFrom().failure(new io.quarkus.security.UnauthorizedException("Authorization header is invalid or has been expired")));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"invalid-oidc-token\"}")
+            .when().post("/auth/token/oidc")
+            .then()
+            .statusCode(401);
+    }
+
+    @Test
+    void shouldReturnTokenWhenOidcTokenIsValid() {
+        User user = new User();
+        user.email = "oidc-active@example.com";
+        user.enabled = true;
+        user.plan = "pro";
+        user.roles = List.of("user");
+
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
+               .thenReturn(Uni.createFrom().item("oidc-active@example.com"));
+        Mockito.when(userRepository.findByEmail("oidc-active@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+        Mockito.when(refreshTokenRepository.persist(Mockito.<RefreshToken>any()))
+               .thenAnswer(inv -> { RefreshToken rt = inv.getArgument(0); return Uni.createFrom().item(rt); });
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"valid-oidc-token\"}")
+            .when().post("/auth/token/oidc")
+            .then()
+            .statusCode(200)
+            .body("token_type", equalTo("Bearer"))
+            .body("access_token", notNullValue())
+            .body("refresh_token", notNullValue())
+            .body("expires_in", greaterThan(0));
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenOidcUserIsDisabled() {
+        User user = new User();
+        user.email = "oidc-disabled@example.com";
+        user.enabled = false;
+
+        Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
+               .thenReturn(Uni.createFrom().item("oidc-disabled@example.com"));
+        Mockito.when(userRepository.findByEmail("oidc-disabled@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"valid-oidc-token\"}")
+            .when().post("/auth/token/oidc")
             .then()
             .statusCode(401);
     }
