@@ -10,6 +10,10 @@ public record TokenResponse(
     @JsonProperty("access_token")
     @Schema(description = "Signed JWT access token") String accessToken,
     @JsonProperty("expires_in")
-    @Schema(description = "Token expiration time in seconds", example = "86400") long expiresIn
+    @Schema(description = "Token expiration time in seconds", example = "900") long expiresIn,
+    @JsonProperty("refresh_token")
+    @Schema(description = "Opaque refresh token (UUID)") String refreshToken,
+    @JsonProperty("refresh_expires_in")
+    @Schema(description = "Refresh token expiration time in seconds", example = "2592000") long refreshExpiresIn
 ) {
 }
