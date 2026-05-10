@@ -14,7 +14,7 @@ jobs:
     name: push docker image to docker hub
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
 
       - name: Generate JWT HMAC secret
         run: |
