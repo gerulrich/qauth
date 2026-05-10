@@ -11,6 +11,7 @@ import quantum.auth.model.RefreshToken;
 import quantum.auth.model.User;
 import quantum.auth.repository.RefreshTokenRepository;
 import quantum.auth.repository.UserRepository;
+import quantum.auth.service.GoogleTokenVerifierService;
 import quantum.auth.service.PasswordService;
 
 import java.nio.charset.StandardCharsets;
@@ -34,6 +35,9 @@ class AuthTokenResourceTest {
 
     @InjectMock
     RefreshTokenRepository refreshTokenRepository;
+
+    @InjectMock
+    GoogleTokenVerifierService googleTokenVerifierService;
 
     @Test
     void shouldReturnBadRequestWhenBodyIsEmpty() {
@@ -145,6 +149,75 @@ class AuthTokenResourceTest {
             .then()
             .statusCode(200)
             .body("access_token", notNullValue());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenGoogleTokenBodyIsEmpty() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("{}")
+            .when().post("/auth/token/google")
+            .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenGoogleTokenIsInvalid() {
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("invalid-google-token"))
+               .thenReturn(Uni.createFrom().failure(new io.quarkus.security.UnauthorizedException("Authorization header is invalid or has been expired")));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"invalid-google-token\"}")
+            .when().post("/auth/token/google")
+            .then()
+            .statusCode(401);
+    }
+
+    @Test
+    void shouldReturnTokenWhenGoogleTokenIsValid() {
+        User user = new User();
+        user.email = "google-active@example.com";
+        user.enabled = true;
+        user.plan = "pro";
+        user.roles = List.of("user");
+
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+               .thenReturn(Uni.createFrom().item("google-active@example.com"));
+        Mockito.when(userRepository.findByEmail("google-active@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+        Mockito.when(refreshTokenRepository.persist(Mockito.<RefreshToken>any()))
+               .thenAnswer(inv -> { RefreshToken rt = inv.getArgument(0); return Uni.createFrom().item(rt); });
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"valid-google-token\"}")
+            .when().post("/auth/token/google")
+            .then()
+            .statusCode(200)
+            .body("token_type", equalTo("Bearer"))
+            .body("access_token", notNullValue())
+            .body("refresh_token", notNullValue())
+            .body("expires_in", greaterThan(0));
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenGoogleUserIsDisabled() {
+        User user = new User();
+        user.email = "google-disabled@example.com";
+        user.enabled = false;
+
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+               .thenReturn(Uni.createFrom().item("google-disabled@example.com"));
+        Mockito.when(userRepository.findByEmail("google-disabled@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("{\"token\":\"valid-google-token\"}")
+            .when().post("/auth/token/google")
+            .then()
+            .statusCode(401);
     }
 
     @Test

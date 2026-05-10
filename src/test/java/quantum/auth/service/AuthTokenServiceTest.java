@@ -35,6 +35,9 @@ class AuthTokenServiceTest {
     @InjectMock
     RefreshTokenRepository refreshTokenRepository;
 
+    @InjectMock
+    GoogleTokenVerifierService googleTokenVerifierService;
+
     // ---------------------------------------------------
     // generateToken
     // ---------------------------------------------------
@@ -142,6 +145,80 @@ class AuthTokenServiceTest {
         assertNotNull(response);
         assertNotNull(response.accessToken());
         assertFalse(response.accessToken().isBlank());
+    }
+
+    @Test
+    void shouldReturnTokenWhenGoogleTokenIsValid() {
+        User user = new User();
+        user.email = "google-active@example.com";
+        user.enabled = true;
+        user.plan = "pro";
+        user.roles = List.of("user");
+
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+               .thenReturn(Uni.createFrom().item("google-active@example.com"));
+        Mockito.when(userRepository.findByEmail("google-active@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+        Mockito.when(refreshTokenRepository.persist(Mockito.<RefreshToken>any()))
+               .thenAnswer(inv -> { RefreshToken rt = inv.getArgument(0); return Uni.createFrom().item(rt); });
+
+        var response = authTokenService.generateTokenFromGoogle("valid-google-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitItem()
+            .assertCompleted()
+            .getItem();
+
+        assertNotNull(response);
+        assertEquals("Bearer", response.tokenType());
+        assertNotNull(response.accessToken());
+        assertFalse(response.accessToken().isBlank());
+        assertNotNull(response.refreshToken());
+        assertFalse(response.refreshToken().isBlank());
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenGoogleUserNotFound() {
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+               .thenReturn(Uni.createFrom().item("missing-google@example.com"));
+        Mockito.when(userRepository.findByEmail("missing-google@example.com"))
+               .thenReturn(Uni.createFrom().nullItem());
+
+        authTokenService.generateTokenFromGoogle("valid-google-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenGoogleUserIsDisabled() {
+        User user = new User();
+        user.email = "disabled-google@example.com";
+        user.enabled = false;
+
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+               .thenReturn(Uni.createFrom().item("disabled-google@example.com"));
+        Mockito.when(userRepository.findByEmail("disabled-google@example.com"))
+               .thenReturn(Uni.createFrom().item(user));
+
+        authTokenService.generateTokenFromGoogle("valid-google-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
+    }
+
+    @Test
+    void shouldThrowUnauthorizedWhenGoogleTokenIsInvalid() {
+        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("invalid-google-token"))
+               .thenReturn(Uni.createFrom().failure(new UnauthorizedException("Authorization header is invalid or has been expired")));
+
+        authTokenService.generateTokenFromGoogle("invalid-google-token")
+            .subscribe()
+            .withSubscriber(UniAssertSubscriber.create())
+            .awaitFailure()
+            .assertFailedWith(UnauthorizedException.class);
     }
 
     // ---------------------------------------------------

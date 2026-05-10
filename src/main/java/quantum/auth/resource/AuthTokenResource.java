@@ -17,6 +17,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import quantum.auth.api.ApiUser;
+import quantum.auth.api.GoogleTokenRequest;
 import quantum.auth.api.RefreshRequest;
 import quantum.auth.api.TokenResponse;
 import quantum.auth.api.TokenRequest;
@@ -54,6 +55,28 @@ public class AuthTokenResource {
     })
     public Uni<TokenResponse> generateToken(@Valid TokenRequest request) {
         return authTokenService.generateToken(request.email(), request.password());
+    }
+
+    @POST
+    @Path("/token/google")
+    @PermitAll
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Generate JWT token using Google Sign-In",
+        description = "Verifies a Google ID token, checks user status, and returns application JWT tokens."
+    )
+    @RequestBody(content = @Content(schema = @Schema(implementation = GoogleTokenRequest.class)))
+    @APIResponses({
+        @APIResponse(
+            responseCode = "200",
+            description = "Token generated successfully",
+            content = @Content(schema = @Schema(implementation = TokenResponse.class))
+        ),
+        @APIResponse(responseCode = "401", description = "Invalid Google token or blocked user"),
+        @APIResponse(responseCode = "400", description = "Invalid request body")
+    })
+    public Uni<TokenResponse> generateTokenWithGoogle(@Valid GoogleTokenRequest request) {
+        return authTokenService.generateTokenFromGoogle(request.token());
     }
 
 
