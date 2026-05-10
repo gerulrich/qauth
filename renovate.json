@@ -1,3 +1,51 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "separateMajorMinor": true,
+  "separateMinorPatch": false,
+  "extends": ["config:recommended", "abandonments:recommended"],
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile"],
+      "addLabels": ["manager:docker"]
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["update:major"]
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "addLabels": ["update:minor"]
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "addLabels": ["update:patch"]
+    },
+    {
+      "description": "Quarkus platform and extensions",
+      "matchPackageNames": ["io.quarkus{/,}**", "io.quarkus.platform{/,}**"],
+      "addLabels": ["dep:quarkus"]
+    },
+    {
+      "description": "MongoDB",
+      "matchPackageNames": ["org.mongodb{/,}**"],
+      "addLabels": ["dep:mongodb"]
+    },
+    {
+      "description": "Security: password hashing and JWT",
+      "matchPackageNames": ["de.mkammerer:argon2-jvm", "com.nimbusds{/,}**"],
+      "addLabels": ["dep:security"]
+    },
+    {
+      "description": "Google authentication",
+      "matchPackageNames": ["com.google.api-client{/,}**", "com.google.auth{/,}**", "com.google.oauth-client{/,}**"],
+      "addLabels": ["dep:google-auth"]
+    },
+    {
+      "description": "Testing stack",
+      "matchPackageNames": ["org.mockito{/,}**", "io.rest-assured{/,}**"],
+      "matchDepTypes": ["test"],
+      "addLabels": ["dep:testing"]
+    }
+  ]
 }
