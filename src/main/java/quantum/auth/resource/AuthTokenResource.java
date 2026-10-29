@@ -16,12 +16,12 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
-import quantum.auth.api.ApiUser;
 import quantum.auth.api.GoogleTokenRequest;
 import quantum.auth.api.OidcTokenRequest;
 import quantum.auth.api.RefreshRequest;
-import quantum.auth.api.TokenResponse;
 import quantum.auth.api.TokenRequest;
+import quantum.auth.api.TokenResponse;
+import quantum.auth.api.UserResponse;
 import quantum.auth.service.AuthTokenService;
 import quantum.auth.service.UserService;
 
@@ -135,13 +135,13 @@ public class AuthTokenResource {
         @APIResponse(
             responseCode = "200",
             description = "User profile retrieved successfully",
-            content = @Content(schema = @Schema(implementation = ApiUser.class))
+            content = @Content(schema = @Schema(implementation = UserResponse.class))
         ),
         @APIResponse(responseCode = "401", description = "Unauthorized - missing or invalid token"),
         @APIResponse(responseCode = "404", description = "User not found")
     })
-    public Uni<ApiUser> getCurrentUser(@Context SecurityContext ctx) {
+    public Uni<UserResponse> getCurrentUser(@Context SecurityContext ctx) {
         return userService.getUser(ctx.getUserPrincipal().getName())
-            .onItem().transform(user -> new ApiUser(user.email, user.name, user.picture));
+            .onItem().transform(user -> new UserResponse(user.email, user.name, user.picture));
     }
 }
