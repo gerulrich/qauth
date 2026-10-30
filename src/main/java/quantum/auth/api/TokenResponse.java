@@ -1,19 +1,24 @@
 package quantum.auth.api;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
+/// Authentication response containing a signed **JWT access token** and an opaque refresh token.
+///
+/// Expiration values are lifetimes in seconds, not absolute timestamps.
+/// JSON property names use the application's snake_case naming strategy,
+/// for example `access_token` and `refresh_expires_in`.
+///
+/// @param tokenType token scheme, such as `Bearer`
+/// @param accessToken signed JWT used to access protected resources
+/// @param expiresIn access token lifetime in seconds
+/// @param refreshToken opaque token used to obtain new tokens
+/// @param refreshExpiresIn refresh token lifetime in seconds
 @Schema(description = "JWT token response")
 public record TokenResponse(
-    @JsonProperty("token_type")
-    @Schema(description = "Token type", example = "Bearer") String tokenType,
-    @JsonProperty("access_token")
+    @Schema(description = "Token type", examples = "Bearer") String tokenType,
     @Schema(description = "Signed JWT access token") String accessToken,
-    @JsonProperty("expires_in")
-    @Schema(description = "Token expiration time in seconds", example = "900") long expiresIn,
-    @JsonProperty("refresh_token")
+    @Schema(description = "Token expiration time in seconds", examples = "900") long expiresIn,
     @Schema(description = "Opaque refresh token (UUID)") String refreshToken,
-    @JsonProperty("refresh_expires_in")
-    @Schema(description = "Refresh token expiration time in seconds", example = "2592000") long refreshExpiresIn
+    @Schema(description = "Refresh token expiration time in seconds", examples = "2592000") long refreshExpiresIn
 ) {
 }

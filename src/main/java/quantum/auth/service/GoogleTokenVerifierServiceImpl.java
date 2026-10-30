@@ -16,8 +16,13 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 
+/// Verifies **Google ID tokens** and extracts a non-blank, verified email address.
+///
+/// Blocking verification runs on the worker pool. Audience validation is configured
+/// only when `google.client-id` is non-blank.
 @ApplicationScoped
-public class GoogleTokenVerifierServiceImpl implements GoogleTokenVerifierService {
+@GoogleTokenVerifier
+public class GoogleTokenVerifierServiceImpl implements TokenVerifierService {
 
     private static final Logger LOG = Logger.getLogger(GoogleTokenVerifierServiceImpl.class);
     private static final String INVALID_GOOGLE_TOKEN = "Authorization header is invalid or has been expired";
@@ -27,6 +32,7 @@ public class GoogleTokenVerifierServiceImpl implements GoogleTokenVerifierServic
 
     private GoogleIdTokenVerifier verifier;
 
+    /// Initializes the Google verifier with an audience restriction when configured.
     @PostConstruct
     void init() {
         GoogleIdTokenVerifier.Builder builder = new GoogleIdTokenVerifier.Builder(
@@ -41,12 +47,23 @@ public class GoogleTokenVerifierServiceImpl implements GoogleTokenVerifierServic
         verifier = builder.build();
     }
 
+    /// Verifies a Google ID token on the worker pool.
+    ///
+    /// @param idToken Google ID token to verify
+    /// @return a `Uni` emitting the verified email address, or failing with
+    ///         [UnauthorizedException] if verification fails or the email is missing or unverified
     @Override
     public Uni<String> verifyAndExtractEmail(String idToken) {
         return Uni.createFrom().item(() -> verifyBlocking(idToken))
             .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
+    /// Performs blocking token verification and checks the email claims.
+    ///
+    /// @param idToken Google ID token to verify
+    /// @return the non-blank email address from the verified token
+    /// @throws UnauthorizedException if verification fails, the email is missing or unverified,
+    ///                               or a security or I/O error occurs
     private String verifyBlocking(String idToken) {
         try {
             GoogleIdToken googleIdToken = verifier.verify(idToken);

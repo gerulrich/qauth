@@ -56,9 +56,9 @@
             <artifactId>quarkus-smallrye-openapi</artifactId>
         </dependency>
         <dependency>
-            <groupId>de.mkammerer</groupId>
-            <artifactId>argon2-jvm</artifactId>
-            <version>2.12</version>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.86</version>
         </dependency>
         <dependency>
             <groupId>com.google.api-client</groupId>

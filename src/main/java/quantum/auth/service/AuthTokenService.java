@@ -23,6 +23,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
+/// Authenticates users and issues **JWT access tokens** and opaque refresh tokens.
+///
+/// Supports password, Google, and OIDC authentication for existing, enabled accounts.
+/// Refresh tokens are stored as hashes and revoked during token rotation.
 @ApplicationScoped
 public class AuthTokenService {
 
@@ -38,10 +42,12 @@ public class AuthTokenService {
     PasswordService passwordService;
 
     @Inject
-    GoogleTokenVerifierService googleTokenVerifierService;
+    @GoogleTokenVerifier
+    TokenVerifierService googleTokenVerifierService;
 
     @Inject
-    OidcTokenVerifierService oidcTokenVerifierService;
+    @OidcTokenVerifier
+    TokenVerifierService oidcTokenVerifierService;
 
     @ConfigProperty(name = "mp.jwt.verify.issuer", defaultValue = "quantumlab")
     String issuer;
@@ -52,6 +58,14 @@ public class AuthTokenService {
     @ConfigProperty(name = "jwt.refresh-expires-seconds", defaultValue = "2592000")
     long refreshExpiresSeconds;
 
+    /// Authenticates an enabled account using its email address and password.
+    ///
+    /// Password verification runs on the worker pool rather than the calling thread.
+    ///
+    /// @param email email address identifying the account
+    /// @param password plaintext password to verify
+    /// @return a `Uni` emitting access and refresh tokens, or failing with
+    ///         [UnauthorizedException] if credentials are invalid or the account is disabled
     public Uni<TokenResponse> generateToken(String email, String password) {
         String masked = email != null ? maskEmail(email) : "null";
         LOG.infof("Token generation request received for email: %s", masked);
@@ -79,6 +93,14 @@ public class AuthTokenService {
             .onItem().transformToUni(this::buildTokenResponseWithRefresh);
     }
 
+    /// Rotates an **opaque refresh token** and issues replacement tokens.
+    ///
+    /// The stored token is revoked before the associated account is checked and new tokens
+    /// are issued. Rotation does not restore the old token if a later operation fails.
+    ///
+    /// @param rawRefreshToken raw token previously returned to the client
+    /// @return a `Uni` emitting replacement tokens, or failing with [UnauthorizedException]
+    ///         if the token is unknown, revoked, or expired, or the account is missing or disabled
     public Uni<TokenResponse> refreshToken(String rawRefreshToken) {
         String tokenHash = hash(rawRefreshToken);
         return refreshTokenRepository.findByTokenHash(tokenHash)
@@ -109,6 +131,11 @@ public class AuthTokenService {
             });
     }
 
+    /// Authenticates an existing, enabled account using a **Google ID token**.
+    ///
+    /// @param googleToken ID token to verify with Google
+    /// @return a `Uni` emitting application tokens, or failing with [UnauthorizedException]
+    ///         if token verification fails or the account is missing or disabled
     public Uni<TokenResponse> generateTokenFromGoogle(String googleToken) {
         return googleTokenVerifierService.verifyAndExtractEmail(googleToken)
             .onItem().transformToUni(email -> {
@@ -130,6 +157,11 @@ public class AuthTokenService {
             });
     }
 
+    /// Authenticates an existing, enabled account using the configured **OIDC provider**.
+    ///
+    /// @param oidcToken ID token to verify with the configured provider
+    /// @return a `Uni` emitting application tokens, or failing with [UnauthorizedException]
+    ///         if token verification fails or the account is missing or disabled
     public Uni<TokenResponse> generateTokenFromOidc(String oidcToken) {
         return oidcTokenVerifierService.verifyAndExtractEmail(oidcToken)
             .onItem().transformToUni(email -> {
@@ -152,6 +184,10 @@ public class AuthTokenService {
     }
 
 
+    /// Creates an opaque refresh token and persists its hash and expiration metadata.
+    ///
+    /// @param user account for which tokens are issued
+    /// @return a `Uni` emitting the token response after refresh token persistence succeeds
     private Uni<TokenResponse> buildTokenResponseWithRefresh(User user) {
         String rawToken = UUID.randomUUID().toString();
         RefreshToken rt = new RefreshToken();
@@ -164,10 +200,15 @@ public class AuthTokenService {
             .replaceWith(buildTokenResponse(user, rawToken));
     }
 
-    private TokenResponse buildTokenResponse(User user) {
-        return buildTokenResponse(user, null);
-    }
 
+    /// Signs an access JWT and combines it with the supplied refresh token.
+    ///
+    /// Includes user identity, roles, and plan level claims. Accounts without roles receive
+    /// the `user` role; accounts without a MongoDB identifier use their email as `uid`.
+    ///
+    /// @param user account whose identity and authorization data populate the JWT
+    /// @param rawRefreshToken raw refresh token to include in the response
+    /// @return the signed access token, refresh token, and their lifetimes
     private TokenResponse buildTokenResponse(User user, String rawRefreshToken) {
         int level = computeLevel(user.plan);
         String uid = user.id != null ? user.id.toHexString() : user.email;
@@ -184,10 +225,19 @@ public class AuthTokenService {
         return new TokenResponse("Bearer", token, defaultExpiresSeconds, rawRefreshToken, refreshExpiresSeconds);
     }
 
+    /// Checks whether an account is enabled for authentication.
+    ///
+    /// @param user account to check
+    /// @return `true` if the account is enabled
     private boolean isUserEnabled(User user) {
         return user.enabled;
     }
 
+    /// Verifies a password against the account's stored hash and logs rejected attempts.
+    ///
+    /// @param user account containing the stored password hash
+    /// @param password plaintext password to verify
+    /// @return `true` if the password matches; otherwise, `false`
     private boolean isPasswordValid(User user, String password) {
         if (!passwordService.verify(user.password, password)) {
             LOG.warnf("User %s has no password set or password does not match", user.email);
@@ -196,10 +246,18 @@ public class AuthTokenService {
         return true;
     }
 
+    /// Wraps an account in a reactive item.
+    ///
+    /// @param user account to emit
+    /// @return a `Uni` emitting the supplied account
     private Uni<User> item(User user) {
         return Uni.createFrom().item(user);
     }
 
+    /// Maps a plan to the numeric `level` claim included in access tokens.
+    ///
+    /// @param plan account plan, which may be `null`
+    /// @return `1` for `basic`, `2` for `pro`, or `3` for any other value, including `null`
     private int computeLevel(String plan) {
         return switch (plan == null ? "" : plan.toLowerCase()) {
             case "basic" -> 1;
@@ -208,6 +266,10 @@ public class AuthTokenService {
         };
     }
 
+    /// Masks an email address for logging, retaining its first character and domain when possible.
+    ///
+    /// @param email non-null email address to mask
+    /// @return the masked address, or `***` if its local part has fewer than two characters
     private String maskEmail(String email) {
         int atIndex = email.indexOf("@");
         if (atIndex > 1) {
@@ -216,6 +278,11 @@ public class AuthTokenService {
         return "***";
     }
 
+    /// Computes a **SHA-256** hash for opaque refresh token storage and lookup.
+    ///
+    /// @param value non-null raw token to hash using UTF-8
+    /// @return the digest encoded as lowercase hexadecimal
+    /// @throws IllegalStateException if SHA-256 is unavailable
     private String hash(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
