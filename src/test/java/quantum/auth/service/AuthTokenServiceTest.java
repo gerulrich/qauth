@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;
 import quantum.auth.model.RefreshToken;
 import quantum.auth.model.User;
@@ -36,16 +37,19 @@ class AuthTokenServiceTest {
     RefreshTokenRepository refreshTokenRepository;
 
     @InjectMock
-    GoogleTokenVerifierService googleTokenVerifierService;
+    @GoogleTokenVerifier
+    TokenVerifierService tokenVerifierService;
 
-     @InjectMock
-    OidcTokenVerifierService oidcTokenVerifierService;
+    @InjectMock
+    @OidcTokenVerifier
+    TokenVerifierService oidcTokenVerifierService;
 
     // ---------------------------------------------------
     // generateToken
     // ---------------------------------------------------
 
     @Test
+    @DisplayName("Rejects password authentication for an unknown user")
     void shouldThrowUnauthorizedWhenUserNotFound() {
         Mockito.when(userRepository.findByEmail("unknown@example.com"))
                .thenReturn(Uni.createFrom().nullItem());
@@ -58,6 +62,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects password authentication for a disabled account")
     void shouldThrowUnauthorizedWhenUserIsDisabled() {
         User user = new User();
         user.email = "disabled@example.com";
@@ -75,6 +80,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects password authentication with an incorrect password")
     void shouldThrowUnauthorizedWhenPasswordIsWrong() {
         User user = new User();
         user.email = "active@example.com";
@@ -94,6 +100,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Issues tokens when user credentials are valid")
     void shouldReturnTokenWhenCredentialsAreValid() {
         User user = new User();
         user.email = "active@example.com";
@@ -125,6 +132,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Assigns default roles when the user has no roles")
     void shouldReturnTokenWithDefaultRolesWhenUserHasNoRoles() {
         User user = new User();
         user.email = "noroles@example.com";
@@ -151,6 +159,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Issues application tokens for a valid Google ID token")
     void shouldReturnTokenWhenGoogleTokenIsValid() {
         User user = new User();
         user.email = "google-active@example.com";
@@ -158,7 +167,7 @@ class AuthTokenServiceTest {
         user.plan = "pro";
         user.roles = List.of("user");
 
-        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+        Mockito.when(tokenVerifierService.verifyAndExtractEmail("valid-google-token"))
                .thenReturn(Uni.createFrom().item("google-active@example.com"));
         Mockito.when(userRepository.findByEmail("google-active@example.com"))
                .thenReturn(Uni.createFrom().item(user));
@@ -181,8 +190,9 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects Google sign-in for an unknown user")
     void shouldThrowUnauthorizedWhenGoogleUserNotFound() {
-        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+        Mockito.when(tokenVerifierService.verifyAndExtractEmail("valid-google-token"))
                .thenReturn(Uni.createFrom().item("missing-google@example.com"));
         Mockito.when(userRepository.findByEmail("missing-google@example.com"))
                .thenReturn(Uni.createFrom().nullItem());
@@ -195,12 +205,13 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects Google sign-in for a disabled account")
     void shouldThrowUnauthorizedWhenGoogleUserIsDisabled() {
         User user = new User();
         user.email = "disabled-google@example.com";
         user.enabled = false;
 
-        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("valid-google-token"))
+        Mockito.when(tokenVerifierService.verifyAndExtractEmail("valid-google-token"))
                .thenReturn(Uni.createFrom().item("disabled-google@example.com"));
         Mockito.when(userRepository.findByEmail("disabled-google@example.com"))
                .thenReturn(Uni.createFrom().item(user));
@@ -213,8 +224,9 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects Google sign-in with an invalid ID token")
     void shouldThrowUnauthorizedWhenGoogleTokenIsInvalid() {
-        Mockito.when(googleTokenVerifierService.verifyAndExtractEmail("invalid-google-token"))
+        Mockito.when(tokenVerifierService.verifyAndExtractEmail("invalid-google-token"))
                .thenReturn(Uni.createFrom().failure(new UnauthorizedException("Authorization header is invalid or has been expired")));
 
         authTokenService.generateTokenFromGoogle("invalid-google-token")
@@ -225,6 +237,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Issues application tokens for a valid OIDC ID token")
     void shouldReturnTokenWhenOidcTokenIsValid() {
         User user = new User();
         user.email = "oidc-active@example.com";
@@ -255,6 +268,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects OIDC sign-in for an unknown user")
     void shouldThrowUnauthorizedWhenOidcUserNotFound() {
         Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("valid-oidc-token"))
                .thenReturn(Uni.createFrom().item("missing-oidc@example.com"));
@@ -269,6 +283,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects OIDC sign-in for a disabled account")
     void shouldThrowUnauthorizedWhenOidcUserIsDisabled() {
         User user = new User();
         user.email = "disabled-oidc@example.com";
@@ -287,6 +302,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects OIDC sign-in with an invalid ID token")
     void shouldThrowUnauthorizedWhenOidcTokenIsInvalid() {
         Mockito.when(oidcTokenVerifierService.verifyAndExtractEmail("invalid-oidc-token"))
                .thenReturn(Uni.createFrom().failure(new UnauthorizedException("Authorization header is invalid or has been expired")));
@@ -303,6 +319,7 @@ class AuthTokenServiceTest {
     // ---------------------------------------------------
 
     @Test
+    @DisplayName("Rotates a valid refresh token and issues new tokens")
     void shouldIssueNewTokensWhenRefreshTokenIsValid() {
         User user = new User();
         user.email = "refresh@example.com";
@@ -339,6 +356,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects a revoked refresh token")
     void shouldThrowUnauthorizedWhenRefreshTokenIsRevoked() {
         RefreshToken stored = new RefreshToken();
         stored.email = "refresh@example.com";
@@ -356,6 +374,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects an expired refresh token")
     void shouldThrowUnauthorizedWhenRefreshTokenIsExpired() {
         RefreshToken stored = new RefreshToken();
         stored.email = "refresh@example.com";
@@ -373,6 +392,7 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects an unknown refresh token")
     void shouldThrowUnauthorizedWhenRefreshTokenNotFound() {
         Mockito.when(refreshTokenRepository.findByTokenHash(Mockito.anyString()))
                .thenReturn(Uni.createFrom().nullItem());
